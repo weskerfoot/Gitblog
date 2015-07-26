@@ -48,10 +48,10 @@
             ,(cadr member)))))
 
 (define password
-  (xstring "youtpass"))
+  (xstring ""))
 
 (define username
-   (xstring "yourname"))
+   (xstring ""))
 
 ; Puts the tags and categories into a terms_names struct
 (define (terms-names tags categories)
@@ -116,16 +116,16 @@
               result)))
 
 ; Writes a post to the blog
-(define (write-post title content tags categories)
+(define (write-post post-id title content tags categories)
   (get-post-id
    (port->string
    (post-pure-port
-    (string->url "https://yourblog.com/xmlrpc.php")
+    (string->url "https://blog/xmlrpc.php")
    (string->bytes/utf-8
      (xexpr->string
       (cond
-        [(is-new? title) (new-post title content (terms-names tags categories))]
-        [else (edit-post title content (retrieve-post-id title))])))))))
+        [(not post-id) (new-post title content (terms-names tags categories))]
+        [else (edit-post title content post-id)])))))))
 
 ; Returns a list of all modified post files in this commit
 (define (get-files)
@@ -147,13 +147,13 @@
      '("test" "firstpost") '("Introduction" "Tests"))))
 
 ; Writes a new post and returns its post id
-(define (handle-post post)
-     (call-with-values
-      (lambda ()
-        (parse-post
-         (port->string
-         (open-input-file post))))
-      write-post))
+(define (handle-post post post-id)
+        (call-with-values
+         (lambda ()
+           (parse-post
+            (port->string
+             (open-input-file post))))
+         (curry write-post post-id)))
 
 (define (get-commits)
   (string-split
@@ -161,23 +161,23 @@
    "\n"))
 
 (define (tracked? post-name)
-   (memf
-    (compose1 number? string->number string-trim)
-    (for/list ([commit (get-commits)])
-    (system-result
-     (format "git notes --ref=~a show ~a" post-name commit)))))
+    (memf
+     number?
+     (map
+      (compose1 string->number string-trim)
+       (for/list ([commit (get-commits)])
+        (system-result
+         (format "git notes --ref=~a show ~a" post-name commit))))))
 
 (for ([post (get-files)])
-  (displayln (length (get-commits)))
-  (let* ([post-id (system-result
-                 (format
-                  "git notes --ref=~a show ~a" post (cadr (get-commits))))])
   (match (tracked? post)
     [#f (displayln "new post!")
-        (let ([post-id (handle-post post)])
+        (let ([post-id (handle-post post #f)])
          (system
           (format
-           "git notes --ref=~a add HEAD -m \"~a\"" post post-id)))]
-    [(list-rest post-id _) (displayln (format "updating post ~a" post-id))
+           "git notes --ref=~a add HEAD -fm \"~a\"" post post-id)))]
+    [(list-rest post-id _)
+     (displayln (format "updating post ~a" post-id))
        (system (format
-                "git notes --ref=~a add HEAD -m \"~a\"" post post-id))])))
+                "git notes --ref=~a add HEAD -fm \"~a\"" post post-id))
+       (handle-post post post-id)]))
