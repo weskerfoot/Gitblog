@@ -5,6 +5,8 @@
 (require net/url)
 (require racket/string)
 
+(define current-commits (make-parameter (list)))
+
 ; Run a command and get the string written to stdout
 (define (system-result command)
   (match
@@ -15,14 +17,6 @@
        (close-output-port in)
        (close-input-port errport)
        result)]))
-
-(define posts (make-hash))
-
-(define (store-post-id title post-id)
-  (hash-set! posts title post-id))
-
-(define (retrieve-post-id title)
-  (hash-ref posts title))
 
 ; XML-RPC string
 (define (xstring str)
@@ -106,10 +100,6 @@
                   ("post_content"
                    ,(xstring post-content)))))))
 
-(define (is-new? title)
-  (not
-   (hash-has-key? posts title)))
-
 (define (get-post-id result)
   (se-path* '(string)
              (string->xexpr
@@ -120,7 +110,7 @@
   (get-post-id
    (port->string
    (post-pure-port
-    (string->url "https://blog/xmlrpc.php")
+    (string->url "https://primop.me/blog/xmlrpc.php")
    (string->bytes/utf-8
      (xexpr->string
       (cond
@@ -160,24 +150,30 @@
    (system-result "git rev-list master")
    "\n"))
 
-(define (tracked? post-name)
-    (memf
-     number?
-     (map
-      (compose1 string->number string-trim)
-       (for/list ([commit (get-commits)])
-        (system-result
-         (format "git notes --ref=~a show ~a" post-name commit))))))
+(define (commit->post-id post-name)
+  (compose1
+   string->number
+   string-trim
+   system-result
+   (curry format "git notes --ref=~a show ~a" post-name)))
 
-(for ([post (get-files)])
-  (match (tracked? post)
-    [#f (displayln "new post!")
-        (let ([post-id (handle-post post #f)])
-         (system
-          (format
-           "git notes --ref=~a add HEAD -fm \"~a\"" post post-id)))]
-    [(list-rest post-id _)
-     (displayln (format "updating post ~a" post-id))
+(define (tracked? post-name)
+  (let ([get-post-id (commit->post-id post-name)])
+  (get-post-id
+   (memf
+    get-post-id
+    (current-commits)))))
+
+(parameterize ([current-commits (get-commits)])
+  (for ([post (get-files)])
+    (match (tracked? post)
+      [#f (displayln "new post!")
+          (let ([post-id (handle-post post #f)])
+            (system
+             (format
+              "git notes --ref=~a add HEAD -fm \"~a\"" post post-id)))]
+      [(list-rest post-id _)
+       (displayln (format "updating post ~a" post-id))
        (system (format
                 "git notes --ref=~a add HEAD -fm \"~a\"" post post-id))
-       (handle-post post post-id)]))
+       (handle-post post post-id)])))
