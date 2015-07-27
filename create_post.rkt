@@ -5,6 +5,7 @@
 (require net/url)
 (require racket/string)
 
+; The current list of commits (as a dynamically scoped name)
 (define current-commits (make-parameter (list)))
 
 ; Run a command and get the string written to stdout
@@ -145,11 +146,13 @@
              (open-input-file post))))
          (curry write-post post-id)))
 
+; Get a list of all commit refs
 (define (get-commits)
   (string-split
    (system-result "git rev-list master")
    "\n"))
 
+; Convert a commit ref into its post ID number (if it exists)
 (define (commit->post-id post-name)
   (compose1
    string->number
@@ -157,23 +160,33 @@
    system-result
    (curry format "git notes --ref=~a show ~a" post-name)))
 
-(define (tracked? post-name)
+; Grab a post id given a post name
+; Return false if it does not exist
+(define (git-href post-name)
   (let ([get-post-id (commit->post-id post-name)])
-  (get-post-id
-   (memf
-    get-post-id
-    (current-commits)))))
+  (match
+   (get-post-id
+    (memf
+     get-post-id
+     (current-commits)))
+    [(list-rest post-id _) post-id]
+    [_ #f])))
+
+; Add or refresh a post id associated with that post name
+(define (git-set! post-name post-id)
+  (system
+   (format
+    "git notes --ref=~a add HEAD -fm \"~a\""
+    post-name
+    post-id)))
 
 (parameterize ([current-commits (get-commits)])
   (for ([post (get-files)])
-    (match (tracked? post)
+    (match (git-href post)
       [#f (displayln "new post!")
           (let ([post-id (handle-post post #f)])
-            (system
-             (format
-              "git notes --ref=~a add HEAD -fm \"~a\"" post post-id)))]
-      [(list-rest post-id _)
+            (git-set! post post-id))]
+      [post-id
        (displayln (format "updating post ~a" post-id))
-       (system (format
-                "git notes --ref=~a add HEAD -fm \"~a\"" post post-id))
+       (git-set! post post-id)
        (handle-post post post-id)])))
