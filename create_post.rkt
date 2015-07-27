@@ -4,9 +4,44 @@
 (require xml/path)
 (require net/url)
 (require racket/string)
+(require readline/readline)
 
+(define (create-config path ex)
+  (let ([password (readline "Your wordpress password? ")]
+        [username (readline "Your wordpress username? ")]
+        [conf (open-output-file path)])
+    (displayln
+     (format "password = ~a" password) conf)
+    (displayln
+     (format "username = ~a" username) conf)
+    (close-output-port conf)
+    (new-config path)))
+
+(define (new-config path)
+  (with-handlers
+    ([exn:fail:filesystem:errno? (curry create-config path)])
+  (let* ([config-file (open-input-file path)]
+         [lines (string-split
+                 (port->string config-file)
+                 "\n")]
+         [config (make-hash)])
+    (for ([line lines]
+          #:unless (string=? line ""))
+      (match (map string-trim
+                  (string-split line "="))
+        [(list "password" password)
+         (hash-set! config 'password password)]
+        [(list "username" username)
+         (hash-set! config 'username username)]
+        [val (error
+              (format "Invalid configuration line: ~a" val))]))
+    (curry hash-ref config))))
+ 
 ; The current list of commits (as a dynamically scoped name)
 (define current-commits (make-parameter (list)))
+
+; The current configuration
+(define your-config (new-config "/home/wes/.config/gitblog.conf"))
 
 ; Run a command and get the string written to stdout
 (define (system-result command)
@@ -43,10 +78,10 @@
             ,(cadr member)))))
 
 (define password
-  (xstring ""))
+  (xstring (your-config 'password)))
 
 (define username
-   (xstring ""))
+   (xstring (your-config 'username)))
 
 ; Puts the tags and categories into a terms_names struct
 (define (terms-names tags categories)
