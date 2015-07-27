@@ -199,15 +199,18 @@
 ; Return false if it does not exist
 (define (git-href post-name)
   (let ([convert-commit (commit->post-id post-name)])
+    (displayln (map convert-commit (current-commits)))
   (match
     (memf
      convert-commit
      (current-commits))
-    [(list-rest post-id _) (convert-commit post-id)]
+    [(list-rest post-id _)
+     (convert-commit post-id)]
     [x #f])))
 
 ; Add or refresh a post id associated with that post name
 (define (git-set! post-name post-id)
+  (displayln (format "git setting ~a ~a" post-name post-id))
   (system
    (format
     "git notes --ref=~a add HEAD -fm \"~a\""
@@ -218,6 +221,8 @@
   (for ([post (get-files)])
     (match (git-href post)
       [#f (displayln "new post!")
+          (when (empty? (current-commits))
+            (system "git commit -n --allow-empty -m \"bootstrap blog\""))
           (let ([post-id (handle-post post #f)])
             (git-set! post post-id))]
       [post-id
