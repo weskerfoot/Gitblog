@@ -198,14 +198,14 @@
 ; Grab a post id given a post name
 ; Return false if it does not exist
 (define (git-href post-name)
-  (let ([get-post-id (commit->post-id post-name)])
+  (let ([convert-commit (commit->post-id post-name)])
   (match
-   (get-post-id
+   (map convert-commit
     (memf
-     get-post-id
+     convert-commit
      (current-commits)))
     [(list-rest post-id _) post-id]
-    [_ #f])))
+    [x #f])))
 
 ; Add or refresh a post id associated with that post name
 (define (git-set! post-name post-id)
