@@ -200,11 +200,10 @@
 (define (git-href post-name)
   (let ([convert-commit (commit->post-id post-name)])
   (match
-   (map convert-commit
     (memf
      convert-commit
-     (current-commits)))
-    [(list-rest post-id _) post-id]
+     (current-commits))
+    [(list-rest post-id _) (convert-commit post-id)]
     [x #f])))
 
 ; Add or refresh a post id associated with that post name
