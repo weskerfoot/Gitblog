@@ -210,25 +210,22 @@
             post-name
             commit-ref))
       [#f ""]
-      [str str]))
-    
-    ])
-    (displayln (format "git notes ref result: ~a" result))
+      [str str]))])
     result))
 
-; Grab a post id given a post name
-; Return false if it does not exist
+; Grab a value given a key
+; Return the default value if it is set
+; otherwise raise an exception
 (define git-href
   (let ([def-val (gensym)])
     (lambda (post-name [default def-val])
       (match
         (memf
         (lambda (commit-ref)
-          (displayln (format "checking commit ~a" commit-ref))
           (let ([notes (git-notes-ref post-name commit-ref)])
           (match notes
-            ["" (displayln (format "commit ~a did not have anything" commit-ref)) #f]
-            [result (displayln (format "found ~a in commit ~a" result commit-ref)) #t])))
+            ["" #f]
+            [result #t])))
         (current-commits))
         [(list-rest commit-id _) commit-id]
         [_
@@ -241,34 +238,23 @@
                 (current-continuation-marks)))]
             [else default])]))))
 
-; Add or refresh a post id associated with that post name
-(define (git-set! post-name post-id)
-  ;(displayln (format "git setting ~a ~a" post-name post-id))
+; Add or refresh a key associated with that value
+(define (git-set! key val)
   (system
    (format
     "git notes --ref=~a add HEAD -fm \"~a\""
-    post-name
-    post-id)))
+    key
+    val)))
 
  (parameterize ([current-commits (get-commits)])
-   (displayln (format "these are the current commits: ~a" (current-commits)))
    (for ([post (get-files)])
-        ;(call-with-values (lambda () (split-path (string->path post))) (compose1 displayln list))
      (match (git-href post #f)
-       [#f (displayln "new post!")
-
+       [#f
            (when (empty? (current-commits))
              ; Add a first commit if there are none so it can store the note properly!
              (system "git commit -n --allow-empty -m \"bootstrap blog\""))
-
              (git-set! post (handle-post post #f))]
-
        [commit-id
-        (displayln (format "updating post ~a" post))
-        (displayln (format "the commit ref I got is ~a" commit-id))
         (let ([post-id (commit->post-id post commit-id)])
-          (displayln post-id)
-          (displayln (format "the commit ref is ~a" commit-id))
           (git-set! post post-id)
           (handle-post post post-id))])))
-
