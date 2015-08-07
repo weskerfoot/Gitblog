@@ -17,6 +17,21 @@
     (close-output-port conf)
     (new-config path)))
 
+(define valid-config-keys
+  ; The list of all valid configuration keys
+  ; i.e. what you can put on the left side of an = in your config
+  (list
+    "password"
+    "username"
+    "url"
+    "blog-location"))
+
+(define (valid-key? key)
+  ; Check if a key is in the list of valid ones
+  (memv
+    (curry equal? key)
+    valid-config-keys))
+
 (define (new-config path)
   (with-handlers
     ([exn:fail:filesystem:errno? (curry create-config path)])
@@ -29,14 +44,12 @@
           #:unless (string=? line ""))
       (match (map string-trim
                   (string-split line "="))
-        [(list "password" password)
-         (hash-set! config 'password password)]
-        [(list "username" username)
-         (hash-set! config 'username username)]
-        [(list "url" url)
-         (hash-set! config 'url url)]
-        [val (error
-              (format "Invalid configuration line: ~a" val))]))
+        [(list key val)
+         (cond
+           [(valid-key? key) (hash-set! config (string->symbol key) val)]
+           [else
+             (error
+               (format "Invalid configuration line: ~a" val))])]))
     (curry hash-ref config))))
 
 ; The current list of commits (as a dynamically scoped name)
@@ -246,15 +259,26 @@
     key
     val)))
 
- (parameterize ([current-commits (get-commits)])
-   (for ([post (get-files)])
+;(parameterize ([current-commits (get-commits)])
+
+; Run when a commit of one or more posts occurs
+(define (commit-posts)
+  (for ([post (get-files)])
      (match (git-href post #f)
        [#f
-           (when (empty? (current-commits))
-             ; Add a first commit if there are none so it can store the note properly!
-             (system "git commit -n --allow-empty -m \"bootstrap blog\""))
-             (git-set! post (handle-post post #f))]
+        (when (empty? (current-commits))
+          ; Add a first commit if there are none so it can store the note properly!
+          (system "git commit -n --allow-empty -m \"bootstrap blog\""))
+          (git-set! post (handle-post post #f))]
        [commit-id
         (let ([post-id (commit->post-id post commit-id)])
           (git-set! post post-id)
           (handle-post post post-id))])))
+
+(provide
+  git-href
+  git-set!
+  commit-posts
+  new-config
+  get-commits
+  current-commits)
