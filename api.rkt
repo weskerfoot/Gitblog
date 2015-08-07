@@ -28,7 +28,7 @@
 
 (define (valid-key? key)
   ; Check if a key is in the list of valid ones
-  (memv
+  (memf
     (curry equal? key)
     valid-config-keys))
 
@@ -45,6 +45,7 @@
       (match (map string-trim
                   (string-split line "="))
         [(list key val)
+         (displayln (format "~a - ~a" key val))
          (cond
            [(valid-key? key) (hash-set! config (string->symbol key) val)]
            [else
