@@ -45,7 +45,6 @@
       (match (map string-trim
                   (string-split line "="))
         [(list key val)
-         (displayln (format "~a - ~a" key val))
          (cond
            [(valid-key? key) (hash-set! config (string->symbol key) val)]
            [else
@@ -137,6 +136,14 @@
                   ("terms_names"
                    ,terms_names))))))
 
+(define (delete-post post-id)
+  (method-call 'wp.deletePost
+               (list
+                (xint 1)
+                username
+                password
+                (xint post-id))))
+
 ; Updates an existing post
 (define (edit-post post-title
                    post-content
@@ -172,14 +179,28 @@
         [(not post-id) (new-post title content (terms-names tags categories))]
         [else (edit-post title content post-id)])))))))
 
+; Deletes a post
+(define (rm-post post-id)
+  (port->string
+   (post-pure-port
+    (string->url (your-config 'url))
+    (string->bytes/utf-8
+     (xexpr->string
+      (delete-post post-id))))))
+
 ; Returns a list of all modified post files in this commit
 (define (get-files)
-  (string-split
+  (map
+   (lambda (file)
+     (string-split
+      file
+      ":"))
+   (string-split
    (with-output-to-string
     (lambda ()
      (system
-      "git status --short | grep -E '^(A|M)' | awk '{ print $2 }' | grep -E '\\.post$'")))
-   "\n"))
+      "git status --short | grep -E '^(A|M|D)' | awk '{ printf \"%s:%s\\n\",$1,$2 }' | grep -E '\\.post$'")))
+   "\n")))
 
 ; Parses a post file and returns the components
 (define (parse-post text)
@@ -192,13 +213,16 @@
      '("test" "firstpost") '("Introduction" "Tests"))))
 
 ; Writes a new post and returns its post id
-(define (handle-post post post-id)
-        (call-with-values
+(define (handle-post status post post-id)
+   (match status
+     [(? (lambda (x) (ormap (curry equal? x) (list "A" "M"))))
+      (call-with-values
          (lambda ()
            (parse-post
             (port->string
              (open-input-file post))))
-         (curry write-post post-id)))
+         (curry write-post post-id))]
+     ["D" (rm-post post-id)]))
 
 ; Get a list of all commit refs
 (define (get-commits)
@@ -264,17 +288,19 @@
 
 ; Run when a commit of one or more posts occurs
 (define (commit-posts)
-  (for ([post (get-files)])
-     (match (git-href post #f)
+  (for ([post-file (get-files)])
+     (let ([post-status (car post-file)]
+           [post (cadr post-file)])
+           (match (git-href post #f)
        [#f
         (when (empty? (current-commits))
           ; Add a first commit if there are none so it can store the note properly!
           (system "git commit -n --allow-empty -m \"bootstrap blog\""))
-          (git-set! post (handle-post post #f))]
+          (git-set! post (handle-post post-status post #f))]
        [commit-id
         (let ([post-id (commit->post-id post commit-id)])
           (git-set! post post-id)
-          (handle-post post post-id))])))
+          (handle-post post-status post post-id))]))))
 
 (provide
   git-href
@@ -282,4 +308,5 @@
   commit-posts
   new-config
   get-commits
-  current-commits)
+  current-commits
+  your-config)
