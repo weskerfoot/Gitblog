@@ -35,21 +35,28 @@
 (define (new-config path)
   (with-handlers
     ([exn:fail:filesystem:errno? (curry create-config path)])
+    
   (let* ([config-file (open-input-file path)]
          [lines (string-split
                  (port->string config-file)
                  "\n")]
          [config (make-hash)])
+    
     (for ([line lines]
           #:unless (string=? line ""))
+      
       (match (map string-trim
                   (string-split line "="))
         [(list key val)
          (cond
-           [(valid-key? key) (hash-set! config (string->symbol key) val)]
+           [(valid-key? key)
+            (hash-set! config
+                       (string->symbol key)
+                       val)]
            [else
              (error
                (format "Invalid configuration line: ~a" val))])]))
+    
     (curry hash-ref config))))
 
 ; The current list of commits (as a dynamically scoped name)
@@ -63,8 +70,10 @@
   (match
       (process command)
     [(list out in pid errport _)
+     
      (let ([result (port->string out)]
            [err-result (port->string out)])
+       
        (close-input-port out)
        (close-output-port in)
        (close-input-port errport)
@@ -215,14 +224,22 @@
 ; Writes a new post and returns its post id
 (define (handle-post status post post-id)
    (match status
-     [(? (lambda (x) (ormap (curry equal? x) (list "A" "M"))))
+
+     [(? (lambda (x)
+           (ormap
+            (curry equal? x)
+            (list "A" "M"))))
       (call-with-values
          (lambda ()
            (parse-post
             (port->string
              (open-input-file post))))
          (curry write-post post-id))]
-     ["D" (rm-post post-id)]))
+     
+     ["D" (rm-post post-id)]
+
+     [m (error
+         (format "Unimplemented mode ~a" m))]))
 
 ; Get a list of all commit refs
 (define (get-commits)
@@ -248,6 +265,7 @@
             post-name
             commit-ref))
       [#f ""]
+      
       [str str]))])
     result))
 
@@ -265,7 +283,9 @@
             ["" #f]
             [result #t])))
         (current-commits))
+        
         [(list-rest commit-id _) commit-id]
+
         [_
           (cond
             [(eq? def-val default)
@@ -274,6 +294,7 @@
                 (format
                   "git-href: no value found for key\n\t~a" post-name)
                 (current-continuation-marks)))]
+            
             [else default])]))))
 
 ; Add or refresh a key associated with that value
@@ -289,14 +310,19 @@
 ; Run when a commit of one or more posts occurs
 (define (commit-posts)
   (for ([post-file (get-files)])
-     (let ([post-status (car post-file)]
+
+    (let ([post-status (car post-file)]
            [post (cadr post-file)])
-           (match (git-href post #f)
-       [#f
+      
+      (match (git-href post #f)
+
+        [#f
         (when (empty? (current-commits))
           ; Add a first commit if there are none so it can store the note properly!
           (system "git commit -n --allow-empty -m \"bootstrap blog\""))
+        
           (git-set! post (handle-post post-status post #f))]
+        
        [commit-id
         (let ([post-id (commit->post-id post commit-id)])
           (git-set! post post-id)
