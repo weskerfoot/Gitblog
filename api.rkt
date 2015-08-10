@@ -198,15 +198,12 @@
 ; Returns a list of all modified post files in this commit
 (define (get-files)
   (map
-   (lambda (file)
-     (string-split
-      file
-      ":"))
+   string-split
    (string-split
    (with-output-to-string
     (lambda ()
      (system
-      "git status --short | grep -E '^(A|M|D)' | awk '{ printf \"%s:%s\\n\",$1,$2 }' | grep -E '\\.post$'")))
+      "git status --short | grep -E '\\.post$'")))
    "\n")))
 
 ; Parses a post file and returns the components
@@ -237,8 +234,8 @@
      
      ["D" (rm-post post-id)]
 
-     [m (error
-         (format "Unimplemented mode ~a" m))]))
+     [m (displayln
+         (format "Untracked file ~a" m))]))
 
 ; Get a list of all commit refs
 (define (get-commits)

@@ -14,6 +14,8 @@
        (cons (path->string bottom)
              (categorize (path->string upper)))])))
 
+;(define (prefix-of 
+
 (define (get-categories path-string)
   (let ([non-categories (categorize (blog-location))])
     (filter
