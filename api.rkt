@@ -5,6 +5,7 @@
 (require net/url)
 (require racket/string)
 (require readline/readline)
+(require "categorize.rkt")
 
 (define (create-config path ex)
   (let ([password (readline "Your wordpress password? ")]
@@ -65,6 +66,9 @@
 ; The current configuration
 (define your-config (new-config "/home/wes/.config/gitblog.conf"))
 
+(define password (make-parameter #f))
+(define username (make-parameter #f))
+
 ; Run a command and get the string written to stdout
 (define (system-result command)
   (match
@@ -104,12 +108,6 @@
             (name ,(car member))
             ,(cadr member)))))
 
-(define password
-  (xstring (your-config 'password)))
-
-(define username
-   (xstring (your-config 'username)))
-
 ; Puts the tags and categories into a terms_names struct
 (define (terms-names tags categories)
   (xstruct
@@ -129,8 +127,8 @@
   (method-call 'wp.newPost
                (list
                 (xint 1)
-                username
-                password
+                (username)
+                (password)
                 (xstruct
                  `(("post_title"
                    ,(xstring post-title))
@@ -149,8 +147,8 @@
   (method-call 'wp.deletePost
                (list
                 (xint 1)
-                username
-                password
+                (username)
+                (password)
                 (xint post-id))))
 
 ; Updates an existing post
@@ -160,8 +158,8 @@
   (method-call 'wp.editPost
                (list
                 (xint 1)
-                username
-                password
+                (username)
+                (password)
                 (xint post-id)
                 (xstruct
                  `(("post_title"
@@ -212,17 +210,17 @@
    "\n")))
 
 ; Parses a post file and returns the components
-(define (parse-post text)
+(define (parse-post categories text)
   (let ([lines (string-split text "\n")])
     (values
      (car lines)
      (string-join
       (cdr lines)
       "\n")
-     '("test" "firstpost") '("Introduction" "Tests"))))
+     '("test" "firstpost") categories)))
 
 ; Writes a new post and returns its post id
-(define (handle-post status post post-id)
+(define (handle-post categories status post post-id)
    (match status
 
      [(? (lambda (x)
@@ -232,6 +230,7 @@
       (call-with-values
          (lambda ()
            (parse-post
+            categories
             (port->string
              (open-input-file post))))
          (curry write-post post-id))]
@@ -309,10 +308,14 @@
 
 ; Run when a commit of one or more posts occurs
 (define (commit-posts)
-  (for ([post-file (get-files)])
+  (parameterize
+      ([blog-location (your-config 'blog-location)])
+    (for ([post-file (get-files)])
 
-    (let ([post-status (car post-file)]
-           [post (cadr post-file)])
+    (let* ([post-status (car post-file)]
+           [post (cadr post-file)]
+           [categories (get-categories post)])
+      (displayln categories)
       
       (match (git-href post #f)
 
@@ -321,12 +324,12 @@
           ; Add a first commit if there are none so it can store the note properly!
           (system "git commit -n --allow-empty -m \"bootstrap blog\""))
         
-          (git-set! post (handle-post post-status post #f))]
+          (git-set! post (handle-post categories post-status post #f))]
         
        [commit-id
         (let ([post-id (commit->post-id post commit-id)])
           (git-set! post post-id)
-          (handle-post post-status post post-id))]))))
+          (handle-post categories post-status post post-id))])))))
 
 (provide
   git-href
@@ -335,4 +338,7 @@
   new-config
   get-commits
   current-commits
-  your-config)
+  your-config
+  password
+  username
+  xstring)
