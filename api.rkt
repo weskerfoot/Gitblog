@@ -10,11 +10,14 @@
 (define (create-config path ex)
   (let ([password (readline "Your wordpress password? ")]
         [username (readline "Your wordpress username? ")]
+        [blog-location (readline "Where is the blog directory? ")]
         [conf (open-output-file path)])
     (displayln
      (format "password = ~a" password) conf)
     (displayln
      (format "username = ~a" username) conf)
+    (displayln
+     (format "blog-location = ~a" blog-location) conf)
     (close-output-port conf)
     (new-config path)))
 
@@ -59,6 +62,15 @@
                (format "Invalid configuration line: ~a" val))])]))
     
     (curry hash-ref config))))
+
+(define (in-blog?)
+  (equal?
+    (string-trim
+     (system-result "pwd"))
+   (path->string
+    (path->directory-path
+    (string->path
+    (your-config 'blog-location))))))
 
 ; The current list of commits (as a dynamically scoped name)
 (define current-commits (make-parameter (list)))
@@ -206,6 +218,13 @@
       "git status --short | grep -E '\\.post$'")))
    "\n")))
 
+; Returns the latest commit message
+; Intended to run in the post-commit hook
+; since you have to actually write the commit msg first
+(define (get-commit-msg)
+  (system-result
+   "git log -1 HEAD | tail -n 1 | sed s/^[[:space:]]*// | tr -d '\\n'"))
+
 ; Parses a post file and returns the components
 (define (parse-post categories text)
   (let ([lines (string-split text "\n")])
@@ -338,4 +357,5 @@
   your-config
   password
   username
-  xstring)
+  xstring
+  in-blog?)
