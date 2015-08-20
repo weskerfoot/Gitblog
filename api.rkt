@@ -195,7 +195,11 @@
    (string->bytes/utf-8
      (xexpr->string
       (cond
-        [(not post-id) (new-post title content (terms-names tags categories))]
+        [(not post-id) (new-post
+                        title
+                        content
+                        (terms-names tags categories))]
+        
         [else (edit-post title content post-id)])))))))
 
 ; Deletes a post
@@ -226,17 +230,17 @@
    "git log -1 HEAD | tail -n 1 | sed s/^[[:space:]]*// | tr -d '\\n'"))
 
 ; Parses a post file and returns the components
-(define (parse-post categories text)
+(define (parse-post categories tags text)
   (let ([lines (string-split text "\n")])
     (values
      (car lines)
      (string-join
       (cdr lines)
       "\n")
-     '("test" "firstpost") categories)))
+     tags categories)))
 
 ; Writes a new post and returns its post id
-(define (handle-post categories status post post-id)
+(define (handle-post categories tags status post post-id)
    (match status
 
      [(? (lambda (x)
@@ -247,11 +251,13 @@
          (lambda ()
            (parse-post
             categories
+            tags
             (port->string
              (open-input-file post))))
          (curry write-post post-id))]
      
-     ["D" (rm-post post-id)]
+     ["D" (displayln post-id)
+          (rm-post post-id)]
 
      [m (displayln
          (format "Untracked file ~a" m))]))
@@ -267,9 +273,16 @@
 ; Convert a commit ref into its post ID number (if it exists)
 (define (commit->post-id post-name commit-ref)
    (string->number
-    (string-trim
-        (system-result
-          (format "git notes --ref=~a show ~a" post-name commit-ref)))))
+          (commit->value
+           post-name
+           commit-ref)))
+
+(define (commit->value key ref)
+  (string-trim
+   (system-result
+    (format
+     "git notes --ref=~a show ~a"
+     key ref))))
 
 (define (git-notes-ref post-name commit-ref)
   (let ([result
@@ -320,6 +333,37 @@
     key
     val)))
 
+; Add tags associated with a post
+(define (add-tag! post tag)
+  (git-set!
+   (format
+    "~a.tags" post)
+   tag))
+
+(define (get-tags post)
+  (let*
+      ([key (format "~a.tags" post)]
+       [ref (git-href
+          key
+          #f)])
+    (cond
+      [(not ref) (list "default")]
+      [else
+       (let ([tag-string
+              (commit->value
+               key
+               ref)])
+    (map
+     (lambda (st)
+       (substring st 1))
+     (string-split tag-string)))])))
+
+(define (add-tag-alias)
+  ; Should only run when the repo is first made
+  (system
+   "git config alias.tag !() { git notes --ref=$1 add HEAD -fm \"${*:2}\"")) 
+    
+
 ;(parameterize ([current-commits (get-commits)])
 
 ; Run when a commit of one or more posts occurs
@@ -330,8 +374,9 @@
 
     (let* ([post-status (car post-file)]
            [post (cadr post-file)]
-           [categories (get-categories post)])
-      (displayln categories)
+           [categories (get-categories post)]
+           [tags (get-tags post)])
+      (displayln tags)
       
       (match (git-href post #f)
 
@@ -340,12 +385,23 @@
           ; Add a first commit if there are none so it can store the note properly!
           (system "git commit -n --allow-empty -m \"bootstrap blog\""))
         
-          (git-set! post (handle-post categories post-status post #f))]
+          (git-set! post
+                    (handle-post
+                     categories
+                     tags
+                     post-status
+                     post #f))]
         
        [commit-id
-        (let ([post-id (commit->post-id post commit-id)])
+        (let ([post-id
+               (commit->post-id post commit-id)])
           (git-set! post post-id)
-          (handle-post categories post-status post post-id))])))))
+          (handle-post
+           categories
+           tags
+           post-status
+           post
+           post-id))])))))
 
 (provide
   git-href
@@ -353,6 +409,7 @@
   commit-posts
   new-config
   get-commits
+  get-commit-msg
   current-commits
   your-config
   password
