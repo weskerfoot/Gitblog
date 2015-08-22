@@ -166,7 +166,8 @@
 ; Updates an existing post
 (define (edit-post post-title
                    post-content
-                   post-id)
+                   post-id
+                   terms-names)
   (method-call 'wp.editPost
                (list
                 (xint 1)
@@ -179,7 +180,9 @@
                   ("post_excerpt"
                    ,(xstring (substring post-content 20)))
                   ("post_content"
-                   ,(xstring post-content)))))))
+                   ,(xstring post-content))
+                  ("terms_names"
+                   ,terms-names))))))
 
 (define (get-post-id result)
   (se-path* '(string)
@@ -200,7 +203,8 @@
                         content
                         (terms-names tags categories))]
         
-        [else (edit-post title content post-id)])))))))
+        [else (edit-post title content post-id
+                         (terms-names tags categories))])))))))
 
 ; Deletes a post
 (define (rm-post post-id)
@@ -344,8 +348,8 @@
   (let*
       ([key (format "~a.tags" post)]
        [ref (git-href
-          key
-          #f)])
+             key
+             #f)])
     (cond
       [(not ref) (list "default")]
       [else
@@ -353,21 +357,23 @@
               (commit->value
                key
                ref)])
-    (map
-     (lambda (st)
-       (substring st 1))
-     (string-split tag-string)))])))
+    (parse-tags tag-string))])))
 
 (define (parse-tags tag)
-  (let
-      ([splitted (string-split tag ":")])
-    (map
-     (lambda (st)
-       (substring st 1))
-     splitted)))
+  (map
+   (lambda (st)
+     (substring st 1))
+   (string-split tag ":")))
+
+(define (to-tag-string taglist)
+  (string-join
+   (map
+    (curry format "#~a")
+    taglist)
+   ":"))
 
 ; Check the environment variables for any new tags
-(define (check-for-tags)
+(define (new-tags)
   (let* ([environ (current-environment-variables)]
          [names (environment-variables-names environ)]
          [names*
@@ -375,19 +381,33 @@
              (compose1
               (curry
                regexp-match
-               #rx"^[^\\.]+\\.tags$")
+               #rx"^.+_tags$")
               string-foldcase
               bytes->string/utf-8)
-             names)])
-    (map
-     (lambda (name)
-      (cons
-        (bytes->string/utf-8 name)
-        (list
-         (parse-tags
-         (bytes->string/utf-8
-          (environment-variables-ref environ name))))))
-     names*)))
+             names)]
+         [names-hash (make-hash)])
+    (for ([name names*])
+      (let ([tag-string (bytes->string/utf-8
+                        (environment-variables-ref environ name))])
+      (hash-set! names-hash
+                 (bytes->string/utf-8 name)
+                  (parse-tags tag-string))))
+    names-hash))
+
+(define (check-tags post new-tags)
+  (match (hash-ref new-tags
+               (format "~a_tags"
+                       (regexp-replace* #px"\\/|\\." post "_"))
+               #f)
+    [#f
+     (match (get-tags post)
+       [#f (list "default")]
+       [tags
+        (add-tag! post (to-tag-string tags))
+        tags])]
+    [tags
+     (add-tag! post (to-tag-string tags))
+     tags]))
   
 
 (define (add-tag-alias)
@@ -407,7 +427,7 @@
     (let* ([post-status (car post-file)]
            [post (cadr post-file)]
            [categories (get-categories post)]
-           [tags (get-tags post)])
+           [tags (check-tags post (new-tags))])
       (displayln tags)
       
       (match (git-href post #f)
