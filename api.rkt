@@ -358,10 +358,30 @@
        (substring st 1))
      (string-split tag-string)))])))
 
+; Check the environment variables for any new tags
+(define (check-for-tags)
+  (let* ([environ (current-environment-variables)]
+         [names (environment-variables-names environ)]
+         [names*
+          (filter
+             (compose1
+              (curry
+               regexp-match
+               #rx"^[^\\.]+\\.tags$")
+              string-foldcase
+              bytes->string/utf-8)
+             names)])
+    (map
+     (compose1
+      bytes->string/utf-8
+      (curry environment-variables-ref environ))
+     names*)))
+  
+
 (define (add-tag-alias)
   ; Should only run when the repo is first made
   (system
-   "git config alias.tag !() { git notes --ref=$1 add HEAD -fm \"${*:2}\"")) 
+   "git config alias.tag !() { git notes --ref=$1 add HEAD -fm \"${*:2}\"}")) 
     
 
 ;(parameterize ([current-commits (get-commits)])
