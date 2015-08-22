@@ -358,6 +358,14 @@
        (substring st 1))
      (string-split tag-string)))])))
 
+(define (parse-tags tag)
+  (let
+      ([splitted (string-split tag ":")])
+    (map
+     (lambda (st)
+       (substring st 1))
+     splitted)))
+
 ; Check the environment variables for any new tags
 (define (check-for-tags)
   (let* ([environ (current-environment-variables)]
@@ -372,9 +380,13 @@
               bytes->string/utf-8)
              names)])
     (map
-     (compose1
-      bytes->string/utf-8
-      (curry environment-variables-ref environ))
+     (lambda (name)
+      (cons
+        (bytes->string/utf-8 name)
+        (list
+         (parse-tags
+         (bytes->string/utf-8
+          (environment-variables-ref environ name))))))
      names*)))
   
 
