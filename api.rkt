@@ -39,16 +39,16 @@
 (define (new-config path)
   (with-handlers
     ([exn:fail:filesystem:errno? (curry create-config path)])
-    
+
   (let* ([config-file (open-input-file path)]
          [lines (string-split
                  (port->string config-file)
                  "\n")]
          [config (make-hash)])
-    
+
     (for ([line lines]
           #:unless (string=? line ""))
-      
+
       (match (map string-trim
                   (string-split line "="))
         [(list key val)
@@ -60,7 +60,7 @@
            [else
              (error
                (format "Invalid configuration line: ~a" val))])]))
-    
+
     (curry hash-ref config))))
 
 (define (in-blog?)
@@ -86,10 +86,10 @@
   (match
       (process command)
     [(list out in pid errport _)
-     
+
      (let ([result (port->string out)]
            [err-result (port->string out)])
-       
+
        (close-input-port out)
        (close-output-port in)
        (close-input-port errport)
@@ -202,7 +202,7 @@
                         title
                         content
                         (terms-names tags categories))]
-        
+
         [else (edit-post title content post-id
                          (terms-names tags categories))])))))))
 
@@ -259,7 +259,7 @@
             (port->string
              (open-input-file post))))
          (curry write-post post-id))]
-     
+
      ["D" (displayln post-id)
           (rm-post post-id)]
 
@@ -297,7 +297,7 @@
             post-name
             commit-ref))
       [#f ""]
-      
+
       [str str]))])
     result))
 
@@ -315,7 +315,7 @@
             ["" #f]
             [result #t])))
         (current-commits))
-        
+
         [(list-rest commit-id _) commit-id]
 
         [_
@@ -326,7 +326,7 @@
                 (format
                   "git-href: no value found for key\n\t~a" post-name)
                 (current-continuation-marks)))]
-            
+
             [else default])]))))
 
 ; Add or refresh a key associated with that value
@@ -408,13 +408,14 @@
     [tags
      (add-tag! post (to-tag-string tags))
      tags]))
-  
 
-(define (add-tag-alias)
-  ; Should only run when the repo is first made
-  (system
-   "git config alias.tag !() { git notes --ref=$1 add HEAD -fm \"${*:2}\"}")) 
-    
+
+(define (add-tag-env post tag)
+  (environment-variables-set!
+   (current-environment-variables)
+   (string->bytes/utf-8
+    (regexp-replace* #px"\\/|\\." post "_"))
+   tag))
 
 ;(parameterize ([current-commits (get-commits)])
 
@@ -429,21 +430,21 @@
            [categories (get-categories post)]
            [tags (check-tags post (new-tags))])
       (displayln tags)
-      
+
       (match (git-href post #f)
 
         [#f
         (when (empty? (current-commits))
           ; Add a first commit if there are none so it can store the note properly!
           (system "git commit -n --allow-empty -m \"bootstrap blog\""))
-        
+
           (git-set! post
                     (handle-post
                      categories
                      tags
                      post-status
                      post #f))]
-        
+
        [commit-id
         (let ([post-id
                (commit->post-id post commit-id)])
