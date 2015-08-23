@@ -344,6 +344,7 @@
     "~a.tags" post)
    tag))
 
+; Get tags from the git notes
 (define (get-tags post)
   (let*
       ([key (format "~a.tags" post)]
@@ -394,11 +395,20 @@
                   (parse-tags tag-string))))
     names-hash))
 
-(define (check-tags post new-tags)
-  (match (hash-ref new-tags
-               (format "~a_tags"
-                       (regexp-replace* #px"\\/|\\." post "_"))
-               #f)
+; Any new tags in environment variables
+(define current-tags (new-tags))
+
+; For looking at any environment variables with new tags
+(define (get-current-tag post)
+  (hash-ref current-tags
+            (format "~a_tags"
+                    (regexp-replace* #px"\\|\\." post "_"))
+            #f))
+
+
+; For checking if there are existing tags for a post
+(define (check-tags post)
+  (match (get-current-tag post)
     [#f
      (match (get-tags post)
        [#f (list "default")]
@@ -409,13 +419,25 @@
      (add-tag! post (to-tag-string tags))
      tags]))
 
-
+; For adding tags from the shell
 (define (add-tag-env post tag)
-  (environment-variables-set!
-   (current-environment-variables)
-   (string->bytes/utf-8
-    (regexp-replace* #px"\\/|\\." post "_"))
-   tag))
+  (let ([current-tags (get-current-tag post)]
+        [tag-set!
+          (lambda (tagstr)
+            (environment-variables-set!
+              (current-environment-variables)
+              (string->bytes/utf-8
+                (regexp-replace* #px"\\/|\\." post "_"))
+              (string->bytes/utf-8 tagstr)))])
+
+    (match current-tags
+      [#f
+       ; there haven't been any tags added yet
+       (tag-set! tag)]
+      [(? list?)
+       (tag-set! (string-join
+                   (cons tag current-tags)
+                   ":"))])))
 
 ;(parameterize ([current-commits (get-commits)])
 
@@ -428,7 +450,7 @@
     (let* ([post-status (car post-file)]
            [post (cadr post-file)]
            [categories (get-categories post)]
-           [tags (check-tags post (new-tags))])
+           [tags (check-tags post current-tags)])
       (displayln tags)
 
       (match (git-href post #f)
