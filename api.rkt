@@ -402,7 +402,7 @@
 (define (get-current-tag post)
   (hash-ref current-tags
             (format "~a_tags"
-                    (regexp-replace* #px"\\|\\." post "_"))
+                    (regexp-replace* #px"\\/|\\." post "_"))
             #f))
 
 
@@ -450,8 +450,8 @@
     (let* ([post-status (car post-file)]
            [post (cadr post-file)]
            [categories (get-categories post)]
-           [tags (check-tags post current-tags)])
-      (displayln tags)
+           [tags (check-tags post)])
+      (displayln current-tags)
 
       (match (git-href post #f)
 
@@ -490,4 +490,5 @@
   password
   username
   xstring
-  in-blog?)
+  in-blog?
+  add-tag-env)
