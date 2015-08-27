@@ -416,10 +416,16 @@
         (add-tag! post (to-tag-string tags))
         tags])]
     [tags
-     (add-tag! post (to-tag-string tags))
-     tags]))
+      (define all-tags #f)
+     (match (get-tags post)
+        [#f (set! all-tags tags)
+            (add-tag! post (to-tag-string tags))]
+        [more-tags
+          (set! all-tags (append more-tags tags))
+          (add-tag! post (to-tag-string all-tags))])
+     all-tags]))
 
-; For adding tags from the shell
+; For adding tags to the environment, only for testing
 (define (add-tag-env post tag)
   (let ([current-tags (get-current-tag post)]
         [tag-set!
@@ -451,7 +457,6 @@
            [post (cadr post-file)]
            [categories (get-categories post)]
            [tags (check-tags post)])
-      (displayln current-tags)
 
       (match (git-href post #f)
 
